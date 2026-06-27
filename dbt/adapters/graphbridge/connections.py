@@ -189,6 +189,14 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
                 return AdapterResponse(_message="OK", code="OK"), table
             return AdapterResponse(_message="OK", code="OK"), agate.Table([])
 
+        # Intercept main statement from graph materializations to output correct rows_affected
+        rows_match = re.search(r"/\*\s*graphbridge_rows_affected:\s*(\d+)\s*\*/", sql)
+        if rows_match and not _is_sql(sql):
+            rows_affected = int(rows_match.group(1))
+            # Just execute it to fulfill dbt, but rewrite the response
+            graph_client.execute_cypher(sql, parameters=bindings)
+            return AdapterResponse(_message=f"OK ({rows_affected})", code="OK", rows_affected=rows_affected), agate.Table([])
+
         # Route: SQL → RDB engine
         if _is_sql(sql):
             try:

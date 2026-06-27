@@ -31,14 +31,16 @@
   -- 4. Record Metadata
   {{ adapter.dispatch('record_model_metadata', 'graphbridge')(this, 'relationship', [relationship_type]) }}
 
-  -- 5. Satisfy dbt-core's expectation for a 'main' statement
+  -- 7. Satisfy dbt-core's expectation for a 'main' statement
+  {% set total_records = batch_data | length %}
   {% call statement('main') %}
+    /* graphbridge_rows_affected: {{ total_records }} */
     RETURN 'OK' AS result
   {% endcall %}
 
   {{ return({'relations': [this]}) }}
 
+
+
+
 {% endmaterialization %}
-
-
-
