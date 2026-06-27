@@ -4,6 +4,6 @@
 
 MATCH (n:{{ node_label }})
 WHERE NOT EXISTS { (n){{ dir_pattern }}() }
-RETURN n, count(*) AS orphan_count
+RETURN n
 
 {% endtest %}

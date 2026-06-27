@@ -26,6 +26,10 @@ class GraphBridgeAdapter(BaseAdapter):
     def execute_cypher(self, cypher: str, parameters: Optional[dict] = None):
         return self.connections.execute_cypher(cypher, parameters)
 
+    @available
+    def add_query(self, sql: str, auto_begin: bool = True, bindings: Optional[Any] = None, abridge_sql_log: bool = False):
+        return self.connections.add_query(sql, auto_begin, bindings, abridge_sql_log)
+
     @classmethod
     def date_function(cls) -> str:
         return "date()"
@@ -39,7 +43,7 @@ class GraphBridgeAdapter(BaseAdapter):
 
     @classmethod
     def quote(cls, identifier: str) -> str:
-        return f"`{identifier}`"
+        return f'"{identifier}"'
 
     @classmethod
     def convert_text_type(cls, column: int, collation: Optional[str]) -> str:

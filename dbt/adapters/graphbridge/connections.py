@@ -73,7 +73,7 @@ class GraphBridgeCredentials(Credentials):
 
 
 # ── SQL keyword detection (comment-agnostic) ────────────────────────
-_SQL_PREFIXES = ("SELECT ", "WITH ", "CREATE TABLE ", "CREATE VIEW ", "DROP ", "ALTER ")
+_SQL_PREFIXES = ("SELECT ", "WITH ", "CREATE TABLE ", "CREATE VIEW ", "DROP ", "ALTER ", "INSERT ", "BEGIN", "COMMIT")
 _COMMENT_RE = [
     re.compile(r'--.*$', re.MULTILINE),
     re.compile(r'//.*$', re.MULTILINE),
@@ -144,6 +144,16 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
     def cancel_open(cls) -> None:
         pass
 
+    def add_query(
+        self,
+        sql: str,
+        auto_begin: bool = True,
+        bindings: Optional[Any] = None,
+        abridge_sql_log: bool = False,
+    ) -> Tuple[Connection, Any]:
+        response, table = self.execute(sql, auto_begin, fetch=False, bindings=bindings)
+        return self.get_thread_connection(), response
+
     @contextmanager
     def exception_handler(self, sql: str) -> Any:
         try:
@@ -159,11 +169,25 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
         auto_begin: bool = False,
         fetch: bool = False,
         limit: Optional[int] = None,
+        bindings: Optional[Any] = None,
     ) -> Tuple[AdapterResponse, Any]:
         import agate
 
         sql_client, graph_client = self._get_clients()
         credentials = self.get_thread_connection().credentials
+
+        # Intercept dbt test wrapper for Cypher queries
+        # dbt generic tests wrap the content in:
+        # select count(*) as failures, count(*) != 0 as should_warn, count(*) != 0 as should_error from ( <content> ) dbt_internal_test
+        test_match = re.search(r"(?i)from\s*\(\s*(MATCH\s+.*?)\s*\)\s*dbt_internal_test", sql, re.DOTALL)
+        if test_match:
+            cypher_query = test_match.group(1).strip()
+            response, records = graph_client.execute_cypher(cypher_query, parameters=bindings)
+            failures = len(records)
+            if fetch:
+                table = agate.Table([[failures, failures != 0, failures != 0]], column_names=["failures", "should_warn", "should_error"])
+                return AdapterResponse(_message="OK", code="OK"), table
+            return AdapterResponse(_message="OK", code="OK"), agate.Table([])
 
         # Route: SQL → RDB engine
         if _is_sql(sql):
@@ -180,7 +204,12 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
                         clean_sql, count=1,
                     )
 
-                columns, rows = sql_client.execute(clean_sql)
+                if bindings:
+                    # duckdb requires ? instead of %s or named bindings?
+                    # actually duckdb handles parameters directly if using duckdb.execute
+                    columns, rows = sql_client.execute(clean_sql, parameters=bindings)
+                else:
+                    columns, rows = sql_client.execute(clean_sql)
                 if fetch and columns:
                     table = agate.Table(rows, column_names=columns)
                     return (

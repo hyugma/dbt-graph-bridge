@@ -15,7 +15,7 @@ class SQLEngineClient(ABC):
     """Abstract base class for SQL engine backends."""
 
     @abstractmethod
-    def execute(self, sql: str) -> Tuple[List[str], List[tuple]]:
+    def execute(self, sql: str, parameters: Optional[Any] = None) -> Tuple[List[str], List[tuple]]:
         """Execute a SQL statement and return (column_names, rows)."""
         ...
 
@@ -32,8 +32,14 @@ class DuckDBClient(SQLEngineClient):
         self._path = path
         self._conn = duckdb.connect(database=path, read_only=False)
 
-    def execute(self, sql: str) -> Tuple[List[str], List[tuple]]:
-        res = self._conn.execute(sql)
+    def execute(self, sql: str, parameters: Optional[Any] = None) -> Tuple[List[str], List[tuple]]:
+        if parameters:
+            # dbt uses %s for duckdb, but duckdb uses ? natively
+            sql = sql.replace("%s", "?")
+            res = self._conn.execute(sql, parameters)
+        else:
+            res = self._conn.execute(sql)
+        
         if res.description:
             columns = [desc[0] for desc in res.description]
             rows = res.fetchall()
@@ -54,10 +60,13 @@ class SQLAlchemyClient(SQLEngineClient):
         from sqlalchemy import create_engine
         self._engine = create_engine(connection_url, connect_args=connect_args or {})
 
-    def execute(self, sql: str) -> Tuple[List[str], List[tuple]]:
+    def execute(self, sql: str, parameters: Optional[Any] = None) -> Tuple[List[str], List[tuple]]:
         from sqlalchemy import text
         with self._engine.connect() as conn:
-            result = conn.execute(text(sql))
+            if parameters:
+                result = conn.execute(text(sql), parameters)
+            else:
+                result = conn.execute(text(sql))
             if result.returns_rows:
                 columns = list(result.keys())
                 rows = result.fetchall()
