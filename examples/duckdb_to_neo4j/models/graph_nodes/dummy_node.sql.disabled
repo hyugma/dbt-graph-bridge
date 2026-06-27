@@ -1,0 +1,11 @@
+{{ config(
+    materialized='node',
+    labels=['TestNode'],
+    unique_key='name'
+) }}
+
+UNWIND [
+    {name: 'Mako', salary: 100},
+    {name: 'Kanta', salary: 100}
+] AS row
+RETURN row.name AS name, row.salary AS salary

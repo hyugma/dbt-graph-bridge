@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# DuckDB / RDB local files
+*.duckdb
+*.db
+*.sqlite
+
+# dbt artifacts and logs
+logs/
+target/
+dbt_packages/
+dbt_modules/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+.DS_Store

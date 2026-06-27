@@ -1,0 +1,19 @@
+{{ config(
+    materialized='relationship',
+    relationship_type='WORKS_IN',
+    source_node={
+        'labels': ['Person', 'Employee'],
+        'key': 'employee_id',
+        'column': 'employee_id'
+    },
+    target_node={
+        'labels': ['Department'],
+        'key': 'department_name',
+        'column': 'department'
+    }
+) }}
+
+SELECT
+    employee_id,
+    department
+FROM {{ ref('stg_employees') }}

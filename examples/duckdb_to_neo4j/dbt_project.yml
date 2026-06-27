@@ -1,0 +1,14 @@
+name: 'duckdb_to_neo4j'
+version: '1.0.0'
+config-version: 2
+
+profile: 'duckdb_to_neo4j'
+
+models:
+  duckdb_to_neo4j:
+    staging:
+      +materialized: table
+    graph_nodes:
+      +materialized: node
+    graph_relationships:
+      +materialized: relationship
