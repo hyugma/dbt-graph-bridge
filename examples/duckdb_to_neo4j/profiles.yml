@@ -1,5 +1,5 @@
 duckdb_to_neo4j:
-  target: dev
+  target: neo4j_dev
   outputs:
     dev:
       type: duckdb
