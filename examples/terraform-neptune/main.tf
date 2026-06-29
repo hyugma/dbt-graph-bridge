@@ -215,6 +215,13 @@ resource "aws_instance" "client" {
 
   user_data_replace_on_change = true
 
+  root_block_device {
+    volume_size           = var.client_root_volume_size
+    volume_type           = "gp3"
+    delete_on_termination = true
+    encrypted             = true
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.ssm,
   ]

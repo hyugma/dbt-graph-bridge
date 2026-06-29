@@ -9,6 +9,7 @@ This Terraform example creates:
 - An Amazon Neptune cluster with IAM database authentication disabled
 - One Neptune instance
 - One Amazon Linux client EC2 instance reachable through SSM Session Manager
+  with a 30 GiB encrypted gp3 root volume
 
 The client EC2 instance is intended as the place to run dbt because Neptune
 endpoints are VPC-private. This is a test-only setup and will create billable AWS
@@ -29,9 +30,17 @@ terraform init
 terraform apply
 ```
 
+To change the client EC2 root volume size:
+
+```bash
+terraform apply -var="client_root_volume_size=50"
+```
+
 After apply, connect to the client instance:
 
 ```bash
+terraform output -raw neptune_opencypher_url
+
 aws ssm start-session \
   --region "$(terraform output -raw aws_region)" \
   --target "$(terraform output -raw client_instance_id)"
@@ -40,7 +49,7 @@ aws ssm start-session \
 Inside the session, test Neptune openCypher:
 
 ```bash
-curl -X POST "$(terraform output -raw neptune_opencypher_url)" \
+curl -X POST "https://<neptune-endpoint>:8182/openCypher" \
   -d "query=RETURN 1 AS ok"
 ```
 

@@ -39,6 +39,12 @@ variable "client_instance_type" {
   default     = "t3.micro"
 }
 
+variable "client_root_volume_size" {
+  description = "Root EBS volume size in GiB for the SSM client host."
+  type        = number
+  default     = 30
+}
+
 variable "tags" {
   description = "Additional tags for all resources."
   type        = map(string)
