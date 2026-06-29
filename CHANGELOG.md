@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a graph engine registry so Neo4j and future graph engines can be resolved through `dbt_graph_bridge.graph_engine` entry points.
+- Prepared Neo4j to live in a separate `graphbridge-neo4j` add-on package with the same contract expected for Neptune and Memgraph.
 - Added `examples/rdb_to_neo4j` as a unified DuckDB/ClickHouse to Neo4j example using one dbt project and multiple targets.
 - Added docs-only `docs_lineage` support in the unified example so dbt docs can show `companies -> stg_companies -> graph nodes -> graph relationships`.
 - Added optional adapter extras for DuckDB and ClickHouse example usage.
@@ -17,6 +19,7 @@ All notable changes to this project will be documented in this file.
 - Updated the unified example so native RDB targets own seed/staging/table materialization and graphbridge targets own only graph node/relationship materialization.
 - Updated example profiles to share native RDB connection values with graphbridge read backends using YAML anchors.
 - Updated CI to use Python 3.10.
+- Removed Neo4j-specific runtime dependency and entry point from core; graph database clients are now expected to come from graph engine add-ons.
 
 ### Fixed
 - Fixed `dbt_adapter` read-only SQL detection so SQL statements with leading dbt `-- depends_on:` comments are still recognized as read queries.

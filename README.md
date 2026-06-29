@@ -34,9 +34,12 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 
-# To run the bundled DuckDB/ClickHouse examples
+# To run the bundled DuckDB/ClickHouse examples against Neo4j
 pip install -e ".[examples]"
+pip install graphbridge-neo4j
 ```
+
+`graphbridge-neo4j` is a separate graph engine add-on package. During local development, install it from its own repository or local checkout before running a `graph_engine: neo4j` target.
 
 ## Getting Started (Unified Example)
 
@@ -127,8 +130,25 @@ Validated native dbt adapter backends:
 - `dbt-clickhouse`
 
 **Graph Engines (Targets)**:
-- `neo4j`
-- `neptune` (Future support)
+- Install a graph engine add-on separately, such as `graphbridge-neo4j`, `graphbridge-neptune`, or `graphbridge-memgraph`
+- `graphbridge-neo4j` is registered as `graph_engine: neo4j`
+
+Graph engine add-ons expose a callable client class or factory that implements the `GraphEngineClient` contract:
+
+```toml
+[project.entry-points."dbt_graph_bridge.graph_engine"]
+graphbridge-neo4j = "graphbridge_neo4j:Neo4jClient"
+graphbridge-neptune = "graphbridge_neptune:NeptuneClient"
+graphbridge-memgraph = "graphbridge_memgraph:MemgraphClient"
+```
+
+Then select it in a graphbridge target:
+
+```yaml
+graph_engine: neptune
+```
+
+This keeps RDB support delegated to native dbt adapters while graph database support can grow through focused graph-side add-ons.
 
 ## License
 Apache License 2.0

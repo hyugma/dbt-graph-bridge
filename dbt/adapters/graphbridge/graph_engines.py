@@ -1,17 +1,18 @@
 """
 Graph Bridge Graph Engine Clients.
 
-Provides pluggable graph database backends (Neo4j, future: Neptune, Memgraph)
-for the graph side of the dbt-graph-bridge pipeline.
+Provides the graph engine contract and entry point registry for the graph side
+of the dbt-graph-bridge pipeline.
 """
 from __future__ import annotations
 
-import datetime
 from abc import ABC, abstractmethod
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from importlib import metadata
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from dbt.adapters.contracts.connection import AdapterResponse
+
+GRAPH_ENGINE_ENTRY_POINT_GROUP = "dbt_graph_bridge.graph_engine"
 
 
 class GraphEngineClient(ABC):
@@ -45,108 +46,100 @@ class GraphEngineClient(ABC):
         ...
 
 
-class Neo4jClient(GraphEngineClient):
-    """Neo4j graph database backend using the official Python driver."""
+GraphEngineFactory = Callable[[Any], GraphEngineClient]
 
-    def __init__(self, credentials):
-        from neo4j import GraphDatabase
+_REQUIRED_GRAPH_CLIENT_METHODS = (
+    "verify_connectivity",
+    "execute_cypher",
+    "execute_cypher_batch",
+    "close",
+)
 
-        driver_config = {
-            "auth": (credentials.graph_user, credentials.graph_password),
-            "connection_timeout": getattr(credentials, "connection_timeout", 30),
-            "max_connection_lifetime": getattr(credentials, "max_connection_lifetime", 3600),
-            "max_connection_pool_size": getattr(credentials, "max_connection_pool_size", 100),
-            "connection_acquisition_timeout": getattr(credentials, "connection_acquisition_timeout", 60),
-        }
-        if credentials.graph_scheme in ("neo4j", "bolt"):
-            driver_config["encrypted"] = getattr(credentials, "graph_encrypted", False)
 
-        self._driver = GraphDatabase.driver(
-            credentials.graph_uri,
-            **driver_config,
-        )
-        self._default_database = getattr(credentials, "graph_database", None) or None
+def _normalise_graph_engine_name(name: Any) -> str:
+    return str(name or "neo4j").strip().lower().replace("_", "-")
 
-    def verify_connectivity(self) -> None:
-        self._driver.verify_connectivity()
 
-    def execute_cypher(
-        self,
-        cypher: str,
-        parameters: Optional[Dict[str, Any]] = None,
-        database: Optional[str] = None,
-    ) -> Tuple[AdapterResponse, list]:
-        db = database or self._default_database
-        with self._driver.session(database=db) as session:
-            result = session.run(cypher, parameters=parameters or {})
-            records = [dict(record) for record in result]
-            summary = result.consume()
+def _register_graph_engine(
+    registry: Dict[str, GraphEngineFactory],
+    name: str,
+    factory: GraphEngineFactory,
+) -> None:
+    key = _normalise_graph_engine_name(name)
+    registry[key] = factory
 
-            response = AdapterResponse(
-                _message=f"OK ({self._count_affected(summary)})",
-                rows_affected=self._count_affected(summary),
-                code="OK",
-            )
-            return response, records
+    if key.startswith("graphbridge-"):
+        registry.setdefault(key.removeprefix("graphbridge-"), factory)
+    else:
+        registry.setdefault(f"graphbridge-{key}", factory)
 
-    def execute_cypher_batch(
-        self,
-        cypher: str,
-        batch_data: list,
-        batch_size: int = 10000,
-        database: Optional[str] = None,
-    ) -> AdapterResponse:
-        def _sanitize(val):
-            if isinstance(val, Decimal):
-                return float(val)
-            if isinstance(val, (datetime.date, datetime.datetime)):
-                return str(val)
-            return val
 
-        batch_size = batch_size or 10000
-        total_affected = 0
+def _entry_points_for_group(group: str):
+    entry_points = metadata.entry_points()
+    if hasattr(entry_points, "select"):
+        return entry_points.select(group=group)
+    return entry_points.get(group, ())
 
-        sanitized_batch = [
-            {k: _sanitize(v) for k, v in record.items()}
-            for record in batch_data
-        ]
 
-        db = database or self._default_database
-        with self._driver.session(database=db) as session:
-            for i in range(0, len(sanitized_batch), batch_size):
-                chunk = sanitized_batch[i : i + batch_size]
-                result = session.run(cypher, parameters={"batch": chunk})
-                summary = result.consume()
-                total_affected += self._count_affected(summary)
-
-        return AdapterResponse(
-            _message=f"OK (total: {total_affected})",
-            rows_affected=total_affected,
-            code="OK",
-        )
-
-    def close(self) -> None:
+def _load_entry_point_graph_engines() -> Dict[str, GraphEngineFactory]:
+    registry: Dict[str, GraphEngineFactory] = {}
+    for entry_point in _entry_points_for_group(GRAPH_ENGINE_ENTRY_POINT_GROUP):
         try:
-            self._driver.close()
-        except Exception:
-            pass
+            factory = entry_point.load()
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to load graph engine add-on '{entry_point.name}' "
+                f"from entry point group '{GRAPH_ENGINE_ENTRY_POINT_GROUP}': {exc}"
+            ) from exc
+        if not callable(factory):
+            raise ValueError(
+                f"Graph engine add-on '{entry_point.name}' must expose a callable "
+                "factory or client class."
+            )
+        _register_graph_engine(registry, entry_point.name, factory)
+    return registry
 
-    @staticmethod
-    def _count_affected(summary) -> int:
-        c = summary.counters
-        return (
-            c.nodes_created + c.nodes_deleted
-            + c.relationships_created + c.relationships_deleted
-            + c.properties_set
+
+def _graph_engine_factories() -> Dict[str, GraphEngineFactory]:
+    registry: Dict[str, GraphEngineFactory] = {}
+    for name, factory in _load_entry_point_graph_engines().items():
+        _register_graph_engine(registry, name, factory)
+    return registry
+
+
+def available_graph_engines() -> Tuple[str, ...]:
+    """Return installed graph engine names."""
+    return tuple(sorted(_graph_engine_factories()))
+
+
+def _validate_graph_client(engine: str, client: Any) -> None:
+    missing = [
+        method
+        for method in _REQUIRED_GRAPH_CLIENT_METHODS
+        if not callable(getattr(client, method, None))
+    ]
+    if missing:
+        raise ValueError(
+            f"Graph engine '{engine}' returned an invalid client. "
+            f"Missing methods: {', '.join(missing)}"
         )
 
 
 def create_graph_client(credentials) -> GraphEngineClient:
     """Factory: create the appropriate graph engine client from credentials."""
     engine = getattr(credentials, "graph_engine", "neo4j")
+    engine_key = _normalise_graph_engine_name(engine)
+    factories = _graph_engine_factories()
+    factory = factories.get(engine_key)
 
-    if engine == "neo4j":
-        return Neo4jClient(credentials)
-    # Future: elif engine == "neptune": return NeptuneClient(credentials)
-    else:
-        raise ValueError(f"Unsupported graph_engine: '{engine}'. Supported: neo4j")
+    if factory is None:
+        supported = ", ".join(available_graph_engines()) or "none"
+        raise ValueError(
+            f"Unsupported graph_engine: '{engine}'. Supported or installed: {supported}. "
+            f"Install a graph engine add-on that registers the "
+            f"'{GRAPH_ENGINE_ENTRY_POINT_GROUP}' entry point group."
+        )
+
+    client = factory(credentials)
+    _validate_graph_client(engine_key, client)
+    return client

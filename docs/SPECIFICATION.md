@@ -89,7 +89,6 @@ The package is defined in `pyproject.toml`.
   - `dbt-adapters>=1.0.0,<2.0.0`
   - `dbt-common>=1.0.0,<2.0.0`
   - `duckdb>=1.0.0,<2.0.0`
-  - `neo4j>=5.0.0,<6.0.0`
   - `pyarrow>=12.0.0`
 - Development dependencies:
   - `pytest`
@@ -130,13 +129,42 @@ This validates the core architectural boundary:
 
 ### 5.3 Graph engines
 
-Implemented:
+Graph engines are provided by external add-on packages. `dbt-graph-bridge` owns the graph engine contract and registry, but does not ship a concrete graph database client.
 
-- `neo4j`
+The Neo4j backend should live in a separate `graphbridge-neo4j` package. That package owns the official Neo4j Python driver dependency and registers itself as `graph_engine: neo4j`.
 
-The Neo4j backend uses the official Neo4j Python driver.
+The entry point group is:
 
-Future graph engines are not implemented in this repository.
+```toml
+[project.entry-points."dbt_graph_bridge.graph_engine"]
+graphbridge-neo4j = "graphbridge_neo4j:Neo4jClient"
+graphbridge-neptune = "graphbridge_neptune:NeptuneClient"
+graphbridge-memgraph = "graphbridge_memgraph:MemgraphClient"
+```
+
+An add-on package such as `graphbridge-neptune` should expose either a client class or factory callable. The callable receives `GraphBridgeCredentials` and must return an object with the `GraphEngineClient` methods:
+
+- `verify_connectivity()`
+- `execute_cypher(cypher, parameters=None, database=None)`
+- `execute_cypher_batch(cypher, batch_data, batch_size=10000, database=None)`
+- `close()`
+
+Entry point names should use the package-style name (`graphbridge-neptune`). The registry also exposes the short alias (`neptune`) for profile configuration:
+
+```yaml
+graph_engine: neptune
+```
+
+The intended package split is:
+
+| Package | Role |
+|---|---|
+| `dbt-graph-bridge` | dbt adapter, RDB-to-graph materializations, graph engine contract, graph engine registry |
+| `graphbridge-neo4j` | Neo4j graph engine add-on and Neo4j Python driver dependency |
+| `graphbridge-neptune` | Future AWS Neptune graph engine add-on |
+| `graphbridge-memgraph` | Future Memgraph graph engine add-on |
+
+This keeps graph database-specific connection, query dialect, batching, and response behavior out of the core adapter when a backend requires specialized handling.
 
 ## 6. Profile Configuration
 
@@ -187,7 +215,7 @@ The adapter credentials are defined by `GraphBridgeCredentials`.
 |---|---:|---|
 | `sql_engine` | `duckdb` | SQL backend name. |
 | `sql_engine_config` | `{path: warehouse.duckdb}` | SQL backend-specific settings. |
-| `graph_engine` | `neo4j` | Graph backend name. |
+| `graph_engine` | `neo4j` | Graph backend name registered through `dbt_graph_bridge.graph_engine`. |
 | `graph_scheme` | `neo4j` | URI scheme used for Neo4j. |
 | `graph_host` | `localhost` | Graph database host. |
 | `graph_port` | `7687` | Graph database port. |

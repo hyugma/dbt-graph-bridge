@@ -25,7 +25,7 @@ class GraphBridgeCredentials(Credentials):
 
     Configures two independent backends:
       1. sql_engine   – The RDB read/query backend (duckdb, sqlalchemy, dbt_adapter)
-      2. graph_engine – The graph DB used for node/relationship storage (neo4j)
+      2. graph_engine – The graph DB used for node/relationship storage
     """
 
     # ── SQL Engine (RDB) ─────────────────────────────────────────────
@@ -33,7 +33,7 @@ class GraphBridgeCredentials(Credentials):
     sql_engine_config: Dict[str, Any] = field(default_factory=lambda: {"path": "warehouse.duckdb"})
 
     # ── Graph Engine ─────────────────────────────────────────────────
-    graph_engine: str = "neo4j"                  # "neo4j" (future: "neptune")
+    graph_engine: str = "neo4j"                  # graph engine entry point name
     graph_scheme: str = "neo4j"
     graph_host: str = "localhost"
     graph_port: int = 7687
