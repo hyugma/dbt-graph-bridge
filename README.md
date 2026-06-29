@@ -2,15 +2,25 @@
 
 **dbt-graph-bridge** is a powerful dbt adapter that bridges traditional Relational Databases (RDBs) with Graph Databases (like Neo4j). 
 
-Unlike a pure graph database adapter, `dbt-graph-bridge` allows you to transform your data using standard SQL in a traditional RDB engine (DuckDB, PostgreSQL, Snowflake, etc.), and seamlessly output the final transformed models directly into a Graph Database as Nodes and Relationships using auto-generated Cypher queries.
+Unlike a pure graph database adapter, `dbt-graph-bridge` lets you keep relational transformations in the native dbt adapter for your RDB, then output the final graph-ready models into a Graph Database as Nodes and Relationships using generated Cypher queries.
 
 ## Architecture
 
-This adapter uses a **Dual-Engine Architecture**:
-1. **SQL Engine**: Handles standard dbt `table` and `view` materializations, running raw SQL queries and CTEs on RDB backends like `duckdb`.
-2. **Graph Engine**: Handles custom `node` and `relationship` materializations, running batch `MERGE` operations on Graph DB backends like `neo4j`.
+This adapter follows an **RDB native adapter first** architecture:
+1. **RDB phase**: Use the existing dbt adapter for the relational backend, such as `dbt-duckdb`, `dbt-clickhouse`, `dbt-snowflake`, or `dbt-bigquery`, to build seeds, staging, intermediate, and mart models.
+2. **Graph phase**: Use `dbt-graph-bridge` for custom `node` and `relationship` materializations, reading graph-ready RDB tables and writing batch graph operations to a Graph DB such as Neo4j.
 
-This enables analysts to model highly complex graph data relationships using the SQL skills they already have, while benefiting from dbt's powerful DAG lineage and testing frameworks.
+This keeps RDB-specific DDL, quoting, table engines, incremental behavior, and dialect handling in the mature native dbt adapters. `dbt-graph-bridge` focuses on the bridge from relational result sets to graph structures.
+
+## Validated Adapter Flows
+
+The RDB native adapter first workflow has been validated with:
+
+| RDB adapter | Example | RDB phase | Graph phase |
+|---|---|---|---|
+| `dbt-duckdb` / `dbt-clickhouse` | `examples/rdb_to_neo4j` | Same seed and staging model built through either native RDB target | Same graph models can read either RDB backend and write to Neo4j/AuraDB |
+
+This example confirms that `dbt-graph-bridge` does not need to reimplement RDB-specific SQL materializations. It can delegate RDB work to the native dbt adapter and use `sql_engine: dbt_adapter` as a read/query backend during graph materialization.
 
 ## Installation
 
@@ -23,26 +33,43 @@ cd dbt-graph-bridge
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+
+# To run the bundled DuckDB/ClickHouse examples
+pip install -e ".[examples]"
 ```
 
-## Getting Started (Example)
+## Getting Started (Unified Example)
 
-An end-to-end example using the Forbes Global 2000 dataset is available in the `examples/duckdb_to_neo4j` directory.
+An end-to-end example using the Forbes company dataset is available in the `examples/rdb_to_neo4j` directory. It demonstrates one dbt project with multiple targets:
+
+- `duckdb_dev`
+- `clickhouse_dev`
+- `neo4j_from_duckdb`
+- `neo4j_from_clickhouse`
 
 ### 1. Setup the profile
 Ensure your `~/.dbt/profiles.yml` (or local `profiles.yml`) contains a target configured for `type: graphbridge`:
 
 ```yaml
-duckdb_to_neo4j:
-  target: neo4j_dev
+rdb_to_neo4j:
+  target: duckdb_dev
   outputs:
-    neo4j_dev:
+    duckdb_dev:
+      type: duckdb
+      <<: &duckdb_connection
+        path: warehouse.duckdb
+
+    neo4j_from_duckdb:
       type: graphbridge
       
-      # RDB Engine (Source/Transformation)
-      sql_engine: duckdb
+      # RDB read/query backend. Build RDB tables with --target duckdb_dev first.
+      sql_engine: dbt_adapter
       sql_engine_config:
-        path: 'warehouse.duckdb'
+        adapter: duckdb
+        profile:
+          database: main
+          schema: main
+          <<: *duckdb_connection
 
       # Graph Engine (Target)
       graph_engine: neo4j
@@ -52,23 +79,52 @@ duckdb_to_neo4j:
       graph_password: 'your_password'
 ```
 
+The native RDB target and the graphbridge read backend should point at the same RDB relation store. The examples use YAML anchors such as `&duckdb_connection` and `*duckdb_connection` to avoid duplicating those connection values.
+
 ### 2. Run the pipeline
+Install the example adapters before running this example:
+
 ```bash
-cd examples/duckdb_to_neo4j
-dbt run --target neo4j_dev
+pip install -e ".[examples]"
+```
+
+DuckDB path:
+
+```bash
+cd examples/rdb_to_neo4j
+dbt seed --profiles-dir . --target duckdb_dev --full-refresh
+dbt run --profiles-dir . --target duckdb_dev
+dbt run --profiles-dir . --target neo4j_from_duckdb
+```
+
+ClickHouse path:
+
+```bash
+cd examples/rdb_to_neo4j
+dbt seed --profiles-dir . --target clickhouse_dev --full-refresh
+dbt run --profiles-dir . --target clickhouse_dev
+dbt run --profiles-dir . --target neo4j_from_clickhouse
 ```
 
 This will:
-1. Load CSV seeds into DuckDB.
-2. Build clean staging tables using standard SQL.
-3. Automatically generate Cypher to create `:Company`, `:Industry`, and `:CEO` nodes in Neo4j.
-4. Draw `:LED_BY`, `:HEADQUARTERED_IN`, and `:BELONGS_TO` relationships in Neo4j.
+1. Load CSV seeds into DuckDB or ClickHouse with the native dbt adapter.
+2. Build clean staging tables with the native dbt adapter.
+3. Read graph-ready RDB tables through the `dbt_adapter` read backend.
+4. Generate Cypher to create `:Company`, `:Industry`, and `:CEO` nodes in Neo4j.
+5. Draw `:LED_BY`, `:HEADQUARTERED_IN`, and `:BELONGS_TO` relationships in Neo4j.
+
+The example disables RDB table models when `target.type == 'graphbridge'`, so a bare graphbridge run runs only graph models. Run the matching native RDB target first so the graph-ready tables already exist.
 
 ## Supported Engines
 
 **SQL Engines (Sources)**:
 - `duckdb`
-- `sqlalchemy` (Future support)
+- `sqlalchemy`
+- `dbt_adapter` read/query backend for installed dbt adapters
+
+Validated native dbt adapter backends:
+- `dbt-duckdb`
+- `dbt-clickhouse`
 
 **Graph Engines (Targets)**:
 - `neo4j`

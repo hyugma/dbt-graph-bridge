@@ -15,9 +15,8 @@
 -- depends_on: {{ ref('company_node') }}
 -- depends_on: {{ ref('industry_node') }}
 
-
 SELECT
     company_id,
     industry
-FROM {{ ref('stg_forbes_g2k') }}
+FROM stg_companies
 WHERE company_id IS NOT NULL AND industry IS NOT NULL

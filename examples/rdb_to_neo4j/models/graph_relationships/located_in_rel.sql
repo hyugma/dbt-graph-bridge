@@ -15,9 +15,8 @@
 -- depends_on: {{ ref('city_node') }}
 -- depends_on: {{ ref('country_node') }}
 
-
 SELECT DISTINCT
     city,
     country
-FROM {{ ref('stg_forbes_g2k') }}
+FROM stg_companies
 WHERE city IS NOT NULL AND country IS NOT NULL

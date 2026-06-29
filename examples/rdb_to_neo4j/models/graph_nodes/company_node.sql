@@ -7,6 +7,9 @@
         {'properties': ['rank']}
     ]
 ) }}
+{% if var('docs_lineage', false) %}
+-- depends_on: {{ ref('stg_companies') }}
+{% endif %}
 
 SELECT
     company_id,
@@ -15,10 +18,10 @@ SELECT
     revenue,
     profits,
     assets,
-    marketValue,
+    market_value,
     employees,
-    yearFounded,
+    year_founded,
     description,
-    webSite
-FROM {{ ref('stg_forbes_g2k') }}
+    web_site
+FROM stg_companies
 WHERE company_id IS NOT NULL

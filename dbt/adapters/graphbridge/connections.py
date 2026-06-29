@@ -24,12 +24,12 @@ class GraphBridgeCredentials(Credentials):
     Credentials for dbt-graph-bridge.
 
     Configures two independent backends:
-      1. sql_engine   – The RDB used for data transformation (duckdb, sqlalchemy)
+      1. sql_engine   – The RDB read/query backend (duckdb, sqlalchemy, dbt_adapter)
       2. graph_engine – The graph DB used for node/relationship storage (neo4j)
     """
 
     # ── SQL Engine (RDB) ─────────────────────────────────────────────
-    sql_engine: str = "duckdb"                   # "duckdb" | "sqlalchemy"
+    sql_engine: str = "duckdb"                   # "duckdb" | "sqlalchemy" | "dbt_adapter"
     sql_engine_config: Dict[str, Any] = field(default_factory=lambda: {"path": "warehouse.duckdb"})
 
     # ── Graph Engine ─────────────────────────────────────────────────
@@ -37,7 +37,7 @@ class GraphBridgeCredentials(Credentials):
     graph_scheme: str = "neo4j"
     graph_host: str = "localhost"
     graph_port: int = 7687
-    graph_database: str = "neo4j"
+    graph_database: Optional[str] = "neo4j"
     graph_user: str = "neo4j"
     graph_password: str = ""
     graph_encrypted: bool = False
@@ -74,6 +74,7 @@ class GraphBridgeCredentials(Credentials):
 
 # ── SQL keyword detection (comment-agnostic) ────────────────────────
 _SQL_PREFIXES = ("SELECT ", "WITH ", "CREATE TABLE ", "CREATE VIEW ", "DROP ", "ALTER ", "INSERT ", "BEGIN", "COMMIT")
+_SQL_READ_PREFIXES = ("SELECT ", "WITH ")
 _COMMENT_RE = [
     re.compile(r'--.*$', re.MULTILINE),
     re.compile(r'//.*$', re.MULTILINE),
@@ -81,12 +82,17 @@ _COMMENT_RE = [
 ]
 
 
-def _is_sql(sql: str) -> bool:
-    """Return True if `sql` looks like a standard SQL statement."""
+def _normalise_statement(sql: str) -> str:
+    """Remove comments and normalize whitespace for statement-prefix checks."""
     cleaned = sql
     for pattern in _COMMENT_RE:
         cleaned = pattern.sub('', cleaned)
-    normalised = " ".join(cleaned.strip().upper().split())
+    return " ".join(cleaned.strip().upper().split())
+
+
+def _is_sql(sql: str) -> bool:
+    """Return True if `sql` looks like a standard SQL statement."""
+    normalised = _normalise_statement(sql)
     return any(normalised.startswith(prefix) for prefix in _SQL_PREFIXES)
 
 
@@ -126,6 +132,14 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
         conn = self.get_thread_connection()
         handle = conn.handle
         return handle["sql_client"], handle["graph_client"]
+
+    def _resolve_graph_database(self, database: Optional[str] = None) -> Optional[str]:
+        credentials = self.get_thread_connection().credentials
+        configured_database = getattr(credentials, "graph_database", None) or None
+        dbt_database = getattr(credentials, "database", None)
+        if database in (None, "", dbt_database):
+            return configured_database
+        return database
 
     @classmethod
     def get_response(cls, cursor) -> AdapterResponse:
@@ -203,9 +217,15 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
                 # Strip graph DB schema prefixes that dbt may inject
                 clean_sql = sql.replace(f'"{credentials.database}"."{credentials.schema}".', '')
 
-                # Rewrite CREATE TABLE → CREATE OR REPLACE TABLE (idempotent)
-                upper = " ".join(clean_sql.strip().upper().split())
-                if upper.startswith("CREATE TABLE "):
+                # Rewrite CREATE TABLE → CREATE OR REPLACE TABLE for DuckDB.
+                upper = _normalise_statement(clean_sql)
+                if credentials.sql_engine == "dbt_adapter" and not upper.startswith(_SQL_READ_PREFIXES):
+                    raise DbtRuntimeError(
+                        "The dbt_adapter SQL engine is read-only inside graphbridge. "
+                        "Run RDB materializations with the native dbt adapter target first, "
+                        "then run graphbridge with graph node/relationship selections only."
+                    )
+                if credentials.sql_engine == "duckdb" and upper.startswith("CREATE TABLE "):
                     clean_sql = re.sub(
                         r'(?i)\bcreate\s+table\b',
                         'CREATE OR REPLACE TABLE',
@@ -226,10 +246,10 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
                     )
                 return AdapterResponse(_message="OK", code="OK"), agate.Table([])
             except Exception as e:
-                import sys
-                print(f"SQL Engine Error ({credentials.sql_engine}): "
-                      f"{type(e).__name__} – {e}", file=sys.stderr)
-                # Fall through to graph engine as last resort
+                raise DbtRuntimeError(
+                    f"SQL engine failed (sql_engine={credentials.sql_engine}): "
+                    f"{type(e).__name__} – {e}"
+                )
 
         # Route: Cypher → Graph engine
         response, records = graph_client.execute_cypher(sql)
@@ -251,6 +271,7 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
         database: Optional[str] = None,
     ) -> Tuple[AdapterResponse, list]:
         _, graph_client = self._get_clients()
+        database = self._resolve_graph_database(database)
         return graph_client.execute_cypher(cypher, parameters, database)
 
     def execute_cypher_batch(
@@ -261,4 +282,5 @@ class GraphBridgeConnectionManager(BaseConnectionManager):
         database: Optional[str] = None,
     ) -> AdapterResponse:
         _, graph_client = self._get_clients()
+        database = self._resolve_graph_database(database)
         return graph_client.execute_cypher_batch(cypher, batch_data, batch_size, database)

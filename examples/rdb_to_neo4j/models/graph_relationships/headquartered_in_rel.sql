@@ -15,9 +15,8 @@
 -- depends_on: {{ ref('company_node') }}
 -- depends_on: {{ ref('city_node') }}
 
-
 SELECT
     company_id,
     city
-FROM {{ ref('stg_forbes_g2k') }}
+FROM stg_companies
 WHERE company_id IS NOT NULL AND city IS NOT NULL

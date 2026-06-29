@@ -8,18 +8,30 @@ version = "0.1.0"
 description = "dbt adapter that bridges RDB sources to graph databases (Neo4j, etc.)"
 readme = "README.md"
 license = {text = "Apache-2.0"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "dbt-adapters>=1.0.0,<2.0.0",
     "dbt-common>=1.0.0,<2.0.0",
+    "duckdb>=1.0.0,<2.0.0",
     "neo4j>=5.0.0,<6.0.0",
     "pyarrow>=12.0.0",
 ]
 
 [project.optional-dependencies]
+duckdb-adapter = [
+    "dbt-duckdb>=1.9.0,<2.0.0",
+]
+clickhouse-adapter = [
+    "dbt-clickhouse>=1.9.0,<2.0.0",
+]
+examples = [
+    "dbt-duckdb>=1.9.0,<2.0.0",
+    "dbt-clickhouse>=1.9.0,<2.0.0",
+]
 dev = [
     "pytest>=7.0",
     "dbt-tests-adapter>=1.0.0",
+    "dbt-duckdb>=1.9.0,<2.0.0",
     "black",
     "ruff",
     "mypy",

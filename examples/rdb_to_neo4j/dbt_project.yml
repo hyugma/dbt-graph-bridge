@@ -1,0 +1,22 @@
+name: 'rdb_to_neo4j'
+version: '1.0.0'
+config-version: 2
+
+profile: 'rdb_to_neo4j'
+
+seeds:
+  rdb_to_neo4j:
+    companies:
+      +quote_columns: false
+
+models:
+  rdb_to_neo4j:
+    staging:
+      +materialized: table
+      +enabled: "{{ target.type != 'graphbridge' or var('docs_lineage', false) }}"
+    graph_nodes:
+      +materialized: node
+      +enabled: "{{ target.type == 'graphbridge' }}"
+    graph_relationships:
+      +materialized: relationship
+      +enabled: "{{ target.type == 'graphbridge' }}"

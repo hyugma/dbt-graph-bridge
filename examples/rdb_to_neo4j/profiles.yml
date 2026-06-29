@@ -1,0 +1,62 @@
+rdb_to_neo4j:
+  target: duckdb_dev
+  outputs:
+    duckdb_dev:
+      type: duckdb
+      <<: &duckdb_connection
+        path: "{{ env_var('DBT_GRAPHBRIDGE_DUCKDB_PATH', 'warehouse.duckdb') }}"
+      threads: 2
+
+    clickhouse_dev:
+      type: clickhouse
+      <<: &clickhouse_connection
+        schema: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_SCHEMA', 'default') }}"
+        host: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_HOST', 'localhost') }}"
+        port: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_PORT', 8123) | as_number }}"
+        user: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_USER', 'default') }}"
+        password: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_PASSWORD', '') }}"
+        secure: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_SECURE', 'False') | as_bool }}"
+        driver: "{{ 'http' if env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_DRIVER', 'http') | lower == 'https' else env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_DRIVER', 'http') }}"
+        retries: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_RETRIES', 3) | as_number }}"
+        connect_timeout: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_CONNECT_TIMEOUT', 60) | as_number }}"
+        send_receive_timeout: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_SEND_RECEIVE_TIMEOUT', 300) | as_number }}"
+        sync_request_timeout: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_SYNC_REQUEST_TIMEOUT', 60) | as_number }}"
+        check_exchange: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_CHECK_EXCHANGE', 'False') | as_bool }}"
+      threads: 1
+
+    neo4j_from_duckdb:
+      type: graphbridge
+
+      # RDB side: read/query backend only.
+      # Build RDB tables with --target duckdb_dev first.
+      sql_engine: dbt_adapter
+      sql_engine_config:
+        adapter: duckdb
+        profile:
+          database: main
+          schema: main
+          <<: *duckdb_connection
+
+      graph_engine: neo4j
+      <<: &neo4j_connection
+        graph_scheme: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_SCHEME', 'neo4j+s') }}"
+        graph_host: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_HOST') }}"
+        graph_port: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_PORT', 7687) | as_number }}"
+        graph_database: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_DATABASE') }}"
+        graph_user: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_USER') }}"
+        graph_password: "{{ env_var('DBT_GRAPHBRIDGE_GRAPH_PASSWORD') }}"
+
+    neo4j_from_clickhouse:
+      type: graphbridge
+
+      # RDB side: read/query backend only.
+      # Build RDB tables with --target clickhouse_dev first.
+      sql_engine: dbt_adapter
+      sql_engine_config:
+        adapter: clickhouse
+        profile:
+          database: "{{ env_var('DBT_GRAPHBRIDGE_CLICKHOUSE_DATABASE', '') }}"
+          <<: *clickhouse_connection
+
+      graph_engine: neo4j
+      <<: *neo4j_connection

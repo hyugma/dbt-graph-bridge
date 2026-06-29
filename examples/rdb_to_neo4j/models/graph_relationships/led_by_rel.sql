@@ -8,17 +8,16 @@
     },
     target_node={
         'labels': ['CEO'],
-        'key': 'ceoName',
-        'column': 'ceoName'
+        'key': 'ceo_name',
+        'column': 'ceo_name'
     }
 ) }}
 -- depends_on: {{ ref('company_node') }}
 -- depends_on: {{ ref('ceo_node') }}
 
-
 SELECT
     company_id,
-    ceoName,
-    ceoTitle
-FROM {{ ref('stg_forbes_g2k') }}
-WHERE company_id IS NOT NULL AND ceoName IS NOT NULL
+    ceo_name,
+    ceo_title
+FROM stg_companies
+WHERE company_id IS NOT NULL AND ceo_name IS NOT NULL

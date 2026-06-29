@@ -51,16 +51,21 @@ class Neo4jClient(GraphEngineClient):
     def __init__(self, credentials):
         from neo4j import GraphDatabase
 
+        driver_config = {
+            "auth": (credentials.graph_user, credentials.graph_password),
+            "connection_timeout": getattr(credentials, "connection_timeout", 30),
+            "max_connection_lifetime": getattr(credentials, "max_connection_lifetime", 3600),
+            "max_connection_pool_size": getattr(credentials, "max_connection_pool_size", 100),
+            "connection_acquisition_timeout": getattr(credentials, "connection_acquisition_timeout", 60),
+        }
+        if credentials.graph_scheme in ("neo4j", "bolt"):
+            driver_config["encrypted"] = getattr(credentials, "graph_encrypted", False)
+
         self._driver = GraphDatabase.driver(
             credentials.graph_uri,
-            auth=(credentials.graph_user, credentials.graph_password),
-            encrypted=getattr(credentials, "graph_encrypted", False),
-            connection_timeout=getattr(credentials, "connection_timeout", 30),
-            max_connection_lifetime=getattr(credentials, "max_connection_lifetime", 3600),
-            max_connection_pool_size=getattr(credentials, "max_connection_pool_size", 100),
-            connection_acquisition_timeout=getattr(credentials, "connection_acquisition_timeout", 60),
+            **driver_config,
         )
-        self._default_database = getattr(credentials, "graph_database", "neo4j")
+        self._default_database = getattr(credentials, "graph_database", None) or None
 
     def verify_connectivity(self) -> None:
         self._driver.verify_connectivity()

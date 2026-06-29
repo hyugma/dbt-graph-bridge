@@ -3,8 +3,11 @@
     labels=['Industry'],
     unique_key='industry'
 ) }}
+{% if var('docs_lineage', false) %}
+-- depends_on: {{ ref('stg_companies') }}
+{% endif %}
 
 SELECT DISTINCT
     industry
-FROM {{ ref('stg_forbes_g2k') }}
+FROM stg_companies
 WHERE industry IS NOT NULL
