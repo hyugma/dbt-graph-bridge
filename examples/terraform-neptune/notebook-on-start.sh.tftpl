@@ -46,6 +46,7 @@ cat > /home/ec2-user/SageMaker/graphbridge-neptune.ipynb <<'NOTEBOOK'
     "  \"host\": \"${neptune_endpoint}\",\n",
     "  \"port\": ${neptune_port},\n",
     "  \"auth_mode\": \"DEFAULT\",\n",
+    "  \"load_from_s3_arn\": \"\",\n",
     "  \"ssl\": true,\n",
     "  \"ssl_verify\": true,\n",
     "  \"aws_region\": \"${aws_region}\",\n",
