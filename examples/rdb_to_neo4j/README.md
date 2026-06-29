@@ -2,7 +2,7 @@
 
 Unified dbt example for the RDB native adapter first workflow.
 
-The same seed, staging model, graph node models, and graph relationship models can be run against either DuckDB or ClickHouse on the relational side. `dbt-graph-bridge` then reads the already-built relational staging table and writes the graph to Neo4j.
+The same seed, staging model, graph node models, and graph relationship models can be run against either DuckDB or ClickHouse on the relational side. `dbt-graph-bridge` then reads the already-built relational staging table and writes the graph to Neo4j or Neptune.
 
 ## Shape
 
@@ -10,6 +10,8 @@ The same seed, staging model, graph node models, and graph relationship models c
 - `clickhouse_dev`: builds seeds and staging tables with `dbt-clickhouse`
 - `neo4j_from_duckdb`: reads DuckDB staging tables and writes graph resources
 - `neo4j_from_clickhouse`: reads ClickHouse staging tables and writes graph resources
+- `neptune_from_duckdb`: reads DuckDB staging tables and writes graph resources
+- `neptune_from_clickhouse`: reads ClickHouse staging tables and writes graph resources
 
 Use `--target` to switch the active connection. The project keeps a single `profile` name: `rdb_to_neo4j`.
 
@@ -35,7 +37,7 @@ The current CSV does not include parent-company fields, so this unified example 
 - `dbt-duckdb`
 - `dbt-clickhouse`
 - A ClickHouse server if running the ClickHouse path
-- A Neo4j or AuraDB instance for graph writes
+- A Neo4j/AuraDB or Neptune instance for graph writes
 
 From this repository, the example dependencies can be installed with:
 
@@ -76,6 +78,18 @@ export DBT_GRAPHBRIDGE_GRAPH_SCHEME="neo4j+s"
 export DBT_GRAPHBRIDGE_GRAPH_PORT="7687"
 ```
 
+Neptune:
+
+```bash
+export DBT_GRAPHBRIDGE_GRAPH_SCHEME="https"
+export DBT_GRAPHBRIDGE_GRAPH_HOST="graphbridge-test.cluster-xxxxxxxx.ap-northeast-1.neptune.amazonaws.com"
+export DBT_GRAPHBRIDGE_GRAPH_PORT="8182"
+export DBT_GRAPHBRIDGE_GRAPH_DATABASE=""
+export DBT_GRAPHBRIDGE_GRAPH_USER=""
+export DBT_GRAPHBRIDGE_GRAPH_PASSWORD=""
+export DBT_GRAPHBRIDGE_GRAPH_CONNECTION_TIMEOUT="10"
+```
+
 ## DuckDB To Neo4j
 
 ```bash
@@ -94,6 +108,32 @@ dbt run --profiles-dir . --target clickhouse_dev
 dbt run --profiles-dir . --target neo4j_from_clickhouse
 ```
 
+## DuckDB To Neptune
+
+Install the Neptune graph engine add-on before running a Neptune target:
+
+```bash
+pip install graphbridge-neptune
+```
+
+Then run the RDB phase first and the Neptune graph phase second:
+
+```bash
+cd examples/rdb_to_neo4j
+dbt seed --profiles-dir . --target duckdb_dev --full-refresh
+dbt run --profiles-dir . --target duckdb_dev
+dbt run --profiles-dir . --target neptune_from_duckdb
+```
+
+## ClickHouse To Neptune
+
+```bash
+cd examples/rdb_to_neo4j
+dbt seed --profiles-dir . --target clickhouse_dev --full-refresh
+dbt run --profiles-dir . --target clickhouse_dev
+dbt run --profiles-dir . --target neptune_from_clickhouse
+```
+
 When a graphbridge target is used, staging models are disabled and graphbridge runs only graph node and relationship models. Run the matching native RDB target first so `stg_companies` exists in that RDB.
 
 ## Expected Graph Output
@@ -101,7 +141,7 @@ When a graphbridge target is used, staging models are disabled and graphbridge r
 - Nodes: `Company`, `Industry`, `City`, `Country`, `CEO:Person`
 - Relationships: `BELONGS_TO`, `HEADQUARTERED_IN`, `LED_BY`, `LOCATED_IN`
 
-If you run both DuckDB and ClickHouse paths into the same Neo4j database, clear the graph or use a separate database between runs when you want to compare outputs independently.
+If you run multiple RDB paths into the same graph database, clear the graph or use a separate database between runs when you want to compare outputs independently.
 
 ## dbt Docs
 
