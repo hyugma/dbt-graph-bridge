@@ -3,7 +3,7 @@
 SELECT
     {{ empty_to_null('company_name') }} AS company_id,
     {{ empty_to_null('company_name') }} AS company_name,
-    {{ safe_int('rank') }} AS rank,
+    {{ safe_int(adapter.quote('rank')) }} AS rank,
     {{ empty_to_null('description') }} AS description,
     {{ empty_to_null('state') }} AS state,
     {{ empty_to_null('industry') }} AS industry,
