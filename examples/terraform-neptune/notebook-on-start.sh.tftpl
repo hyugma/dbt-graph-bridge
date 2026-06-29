@@ -4,12 +4,14 @@ set -euxo pipefail
 sudo -u ec2-user -i bash <<'USER_SCRIPT'
 set -euxo pipefail
 
-PYTHON=/home/ec2-user/anaconda3/envs/JupyterSystemEnv/bin/python
-PIP=/home/ec2-user/anaconda3/envs/JupyterSystemEnv/bin/pip
+for ENV_DIR in /home/ec2-user/anaconda3/envs/JupyterSystemEnv /home/ec2-user/anaconda3/envs/python3; do
+  if [ -x "$ENV_DIR/bin/python" ] && [ -x "$ENV_DIR/bin/pip" ]; then
+    "$ENV_DIR/bin/pip" install --upgrade graph-notebook
+    "$ENV_DIR/bin/python" -m graph_notebook.ipython_profile.configure_ipython_profile || true
+  fi
+done
 
-"$PIP" install --upgrade graph-notebook
-"$PYTHON" -m graph_notebook.ipython_profile.configure_ipython_profile || true
-"$PYTHON" -m graph_notebook.notebooks.install --destination /home/ec2-user/SageMaker/graph-notebook-samples || true
+/home/ec2-user/anaconda3/envs/JupyterSystemEnv/bin/python -m graph_notebook.notebooks.install --destination /home/ec2-user/SageMaker/graph-notebook-samples || true
 
 mkdir -p /home/ec2-user/SageMaker
 cat > /home/ec2-user/SageMaker/graphbridge-neptune.ipynb <<'NOTEBOOK'
@@ -22,6 +24,15 @@ cat > /home/ec2-user/SageMaker/graphbridge-neptune.ipynb <<'NOTEBOOK'
     "# graphbridge-test Neptune\n",
     "\n",
     "Starter notebook for inspecting the dbt-graph-bridge example graph."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext graph_notebook.magics"
    ]
   },
   {
