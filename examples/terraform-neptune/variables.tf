@@ -45,6 +45,24 @@ variable "client_root_volume_size" {
   default     = 30
 }
 
+variable "create_neptune_notebook" {
+  description = "Whether to create a SageMaker notebook configured for Neptune graph visualization."
+  type        = bool
+  default     = false
+}
+
+variable "notebook_instance_type" {
+  description = "SageMaker notebook instance type for Neptune graph visualization."
+  type        = string
+  default     = "ml.t3.medium"
+}
+
+variable "notebook_volume_size" {
+  description = "SageMaker notebook EBS volume size in GiB."
+  type        = number
+  default     = 10
+}
+
 variable "tags" {
   description = "Additional tags for all resources."
   type        = map(string)

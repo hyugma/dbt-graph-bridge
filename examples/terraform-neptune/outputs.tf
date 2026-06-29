@@ -39,3 +39,13 @@ output "graphbridge_env" {
     DBT_GRAPHBRIDGE_GRAPH_PASSWORD = ""
   }
 }
+
+output "notebook_instance_name" {
+  description = "SageMaker notebook instance name for Neptune visualization, when enabled."
+  value       = var.create_neptune_notebook ? aws_sagemaker_notebook_instance.neptune[0].name : null
+}
+
+output "notebook_open_hint" {
+  description = "Where to open the Neptune visualization notebook, when enabled."
+  value       = var.create_neptune_notebook ? "Open SageMaker > Notebook instances > ${aws_sagemaker_notebook_instance.neptune[0].name}, then open SageMaker/graphbridge-neptune.ipynb." : null
+}

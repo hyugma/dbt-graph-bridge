@@ -1,0 +1,93 @@
+#!/bin/bash
+set -euxo pipefail
+
+sudo -u ec2-user -i bash <<'USER_SCRIPT'
+set -euxo pipefail
+
+PYTHON=/home/ec2-user/anaconda3/envs/JupyterSystemEnv/bin/python
+PIP=/home/ec2-user/anaconda3/envs/JupyterSystemEnv/bin/pip
+
+"$PIP" install --upgrade graph-notebook
+"$PYTHON" -m graph_notebook.ipython_profile.configure_ipython_profile || true
+"$PYTHON" -m graph_notebook.notebooks.install --destination /home/ec2-user/SageMaker/graph-notebook-samples || true
+
+mkdir -p /home/ec2-user/SageMaker
+cat > /home/ec2-user/SageMaker/graphbridge-neptune.ipynb <<'NOTEBOOK'
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# graphbridge-test Neptune\n",
+    "\n",
+    "Starter notebook for inspecting the dbt-graph-bridge example graph."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%graph_notebook_config\n",
+    "{\n",
+    "  \"host\": \"${neptune_endpoint}\",\n",
+    "  \"port\": ${neptune_port},\n",
+    "  \"auth_mode\": \"DEFAULT\",\n",
+    "  \"ssl\": true,\n",
+    "  \"ssl_verify\": true,\n",
+    "  \"aws_region\": \"${aws_region}\",\n",
+    "  \"neptune_service\": \"neptune-db\"\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%status"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%oc\n",
+    "MATCH (n)\n",
+    "RETURN labels(n) AS labels, count(n) AS count\n",
+    "ORDER BY count DESC"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%oc -d company_name\n",
+    "MATCH p=(c:Company)-[:HEADQUARTERED_IN]->(city:City)-[:LOCATED_IN]->(country:Country)\n",
+    "RETURN p\n",
+    "LIMIT 100"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
+NOTEBOOK
+USER_SCRIPT

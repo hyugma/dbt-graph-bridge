@@ -230,3 +230,66 @@ resource "aws_instance" "client" {
     Name = "${var.name_prefix}-client"
   })
 }
+
+resource "aws_iam_role" "notebook" {
+  count = var.create_neptune_notebook ? 1 : 0
+
+  name = "${var.name_prefix}-notebook"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "sagemaker.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "notebook_sagemaker" {
+  count = var.create_neptune_notebook ? 1 : 0
+
+  role       = aws_iam_role.notebook[0].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+}
+
+resource "aws_sagemaker_notebook_instance_lifecycle_configuration" "neptune" {
+  count = var.create_neptune_notebook ? 1 : 0
+
+  name = "${var.name_prefix}-neptune-notebook"
+
+  on_start = base64encode(templatefile("${path.module}/notebook-on-start.sh.tftpl", {
+    neptune_endpoint = aws_neptune_cluster.this.endpoint
+    neptune_port     = aws_neptune_cluster.this.port
+    aws_region       = var.aws_region
+  }))
+}
+
+resource "aws_sagemaker_notebook_instance" "neptune" {
+  count = var.create_neptune_notebook ? 1 : 0
+
+  name                   = "${var.name_prefix}-notebook"
+  role_arn               = aws_iam_role.notebook[0].arn
+  instance_type          = var.notebook_instance_type
+  subnet_id              = aws_subnet.public[0].id
+  security_groups        = [aws_security_group.client.id]
+  lifecycle_config_name  = aws_sagemaker_notebook_instance_lifecycle_configuration.neptune[0].name
+  direct_internet_access = "Enabled"
+  root_access            = "Enabled"
+  volume_size            = var.notebook_volume_size
+
+  depends_on = [
+    aws_iam_role_policy_attachment.notebook_sagemaker,
+    aws_neptune_cluster_instance.this,
+  ]
+
+  tags = merge(local.tags, {
+    Name = "${var.name_prefix}-notebook"
+  })
+}

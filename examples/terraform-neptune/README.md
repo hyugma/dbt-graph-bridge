@@ -10,6 +10,7 @@ This Terraform example creates:
 - One Neptune instance
 - One Amazon Linux client EC2 instance reachable through SSM Session Manager
   with a 30 GiB encrypted gp3 root volume
+- Optional SageMaker notebook for Neptune graph visualization
 
 The client EC2 instance is intended as the place to run dbt because Neptune
 endpoints are VPC-private. This is a test-only setup and will create billable AWS
@@ -28,6 +29,12 @@ resources.
 cd examples/terraform-neptune
 terraform init
 terraform apply
+```
+
+To also create a SageMaker notebook for Neptune graph visualization:
+
+```bash
+terraform apply -var="create_neptune_notebook=true"
 ```
 
 To change the client EC2 root volume size:
@@ -59,11 +66,22 @@ For `dbt-graph-bridge`, use the output environment variables:
 terraform output graphbridge_env
 ```
 
+When the notebook is enabled, open it from SageMaker Notebook instances:
+
+```bash
+terraform output notebook_instance_name
+terraform output notebook_open_hint
+```
+
+The notebook instance uses the same VPC subnet and security group path as the
+client EC2 instance, installs `graph-notebook` on start, and creates
+`SageMaker/graphbridge-neptune.ipynb` with starter openCypher queries.
+
 ## Cleanup
 
 ```bash
 terraform destroy
 ```
 
-Destroy the environment when finished. Neptune and EC2 continue to incur cost
-while running.
+Destroy the environment when finished. Neptune, EC2, and the optional SageMaker
+notebook continue to incur cost while running.
